@@ -27,17 +27,23 @@
 #               'main': 'Clouds'}],
 #  'wind': {'deg': 334, 'gust': 12.68, 'speed': 7.08}}
 
-
 import requests as req
 import json
 from time import sleep
 
-import rgb_controller
+try:
+    import rgb_controller
+    leds_present = True
+except ImportError:
+    print("could not import the rgb_controller or one of its dependencies")
+    leds_present = False
 
 def map_value(x, a, b, c, d):
+    """maps the value x in relation to a and b to c and d"""
     return ((c - d) * (x - a)) / (a - b) + c
 
 def map_value_clamp(x, a, b, c, d):
+    """maps the value x in relation to a and b to c and d, then clamps it to that range"""
     v = map_value(x, a, b, c, d)
     if v < c and v < d:
         return min(c, d)
@@ -45,25 +51,34 @@ def map_value_clamp(x, a, b, c, d):
         return max(c, d)
     return v
 
-
-key = "KEY"
-city = "Oldenburg"
-
-while True:
+def request_weather_data(city: str):
+    with open("KEY.txt") as f:
+        key = f.read()
     res = req.get(f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={key}")
+    return json.loads(res.text)
 
-    weather_data = json.loads(res.text)
-
+def calculate_ampel_value(weather_data):
     wind_speed = weather_data['wind']['speed']
     sun = 100 - weather_data['clouds']['all']
 
-    print(f"wind speed: {wind_speed} m/s\tsun: {sun}%")
+    wind_co2 = map_value_clamp(wind_speed, 0, 30, 0.5, 0)
+    sun_co2  = map_value_clamp(sun, 40, 100, 0.5, 0)
+    
+    print(f"sun: {sun}\twind: {wind_speed}")
 
-    wind = map_value_clamp(wind_speed, 0, 10, 0, 0.5)
-    sun  = map_value_clamp(sun, 0, 100, 0, 0.5)
+    return wind_co2 + sun_co2
 
-    total = wind + sun
 
-    rgb_controller.set_ampel(total)
+while True:
+    try:
+        weather_data = request_weather_data('Oldenburg')
+        ampel_value = calculate_ampel_value(weather_data)
+        
+        if leds_present:
+            rgb_controller.set_ampel(ampel_value)
 
-    sleep(60)
+        sleep(60)
+    except KeyboardInterrupt:
+        if leds_present:
+            rgb_controller.quit()
+        break
