@@ -43,7 +43,7 @@ HOLTRIEM_LON    = 7.429167
 def request_weather_data(lat, lon):
     """Requests weather data using the openweathermap api."""
     with open("KEY.txt") as f:
-        key = f.read()
+        key = f.read().rstrip()
     print(f"[INFO] requesting weather data at {lat}, {lon}")
     res = req.get(f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={key}")
     return json.loads(res.text)
