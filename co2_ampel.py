@@ -126,7 +126,7 @@ def estimate_power():
 
     renewable_power_supply = onshore + offshore + solar
 
-    conv_power = c if (c := needed_power - renewable_power_supply) > 0 else 0
+    conv_power = force_non_negative(needed_power - renewable_power_supply)
 
     return {
         "onshore": onshore,
