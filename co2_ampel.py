@@ -1,35 +1,9 @@
-
-# weather_data = {'base': 'stations',
-#  'clouds': {'all': 53},
-#  'cod': 200,
-#  'coord': {'lat': 53.1667, 'lon': 8.2},
-#  'dt': 1642432315,
-#  'id': 2857458,
-#  'main': {'feels_like': 276.32,
-#           'grnd_level': 1029,
-#           'humidity': 81,
-#           'pressure': 1030,
-#           'sea_level': 1030,
-#           'temp': 280.24,
-#           'temp_max': 281.33,
-#           'temp_min': 279.31},
-#  'name': 'Oldenburg',
-#  'sys': {'country': 'DE',
-#          'id': 2010542,
-#          'sunrise': 1642404708,
-#          'sunset': 1642434135,
-#          'type': 2},
-#  'timezone': 3600,
-#  'visibility': 10000,
-#  'weather': [{'description': 'broken clouds',
-#               'icon': '04d',
-#               'id': 803,
-#               'main': 'Clouds'}],
-#  'wind': {'deg': 334, 'gust': 12.68, 'speed': 7.08}}
-
 import requests as req
 import json
 from time import sleep
+import datetime
+from math import sin, pi, e
+
 
 try:
     import rgb_controller
@@ -51,29 +25,138 @@ def map_value_clamp(x, a, b, c, d):
         return max(c, d)
     return v
 
-def request_weather_data(city: str):
+def force_non_negative(x: float) -> float:
+    return x if x > 0 else 0
+
+# coordinates of the city oldenburg
+OLDENBURG_LAT   = 51.165691
+OLDENBURG_LON   = 10.451526
+
+# coordinates of the offshore wind park BorWinAlpha
+BOR_WIN_LAT     = 54.3548547
+BOR_WIN_LON     = 6.02508583
+
+# coordinates of the onshore wind park Holtriem
+HOLTRIEM_LAT    = 53.610278
+HOLTRIEM_LON    = 7.429167
+
+def request_weather_data(lat, lon):
+    """Requests weather data using the openweathermap api."""
     with open("KEY.txt") as f:
         key = f.read()
-    res = req.get(f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={key}")
+    print(f"[INFO] requesting weather data at {lat}, {lon}")
+    res = req.get(f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={key}")
     return json.loads(res.text)
 
-def calculate_ampel_value(weather_data):
-    wind_speed = weather_data['wind']['speed']
-    sun = 100 - weather_data['clouds']['all']
+def get_wind_speed(lat, lon):
+    weather_data = request_weather_data(lat, lon)
+    return weather_data['wind']['speed']
 
-    wind_co2 = map_value_clamp(wind_speed, 0, 30, 0.5, 0)
-    sun_co2  = map_value_clamp(sun, 40, 100, 0.5, 0)
+def get_cloundiness(lat, lon):
+    weather_data = request_weather_data(lat, lon)
+    return weather_data['clouds']['all']
+
+def estimate_needed_power(time: datetime.time, average: float = 60, deviation: float = 20):
+    """Estimates the needed power at a given time
     
-    print(f"sun: {sun}\twind: {wind_speed}")
+    args:
+        time: datetime.time     time
+        average: float          average power needed
+        deviation: float        difference between highest and lowest power consumption
 
-    return wind_co2 + sun_co2
+    returns: float              estimated power consumption in GW
+    """
+    return deviation / 2 * sin(2 * pi / 24 * ((time.hour + time.minute / 60) - 6)) + average
 
+def estimate_currently_needed_power():
+    return estimate_needed_power(datetime.datetime.now())
+
+def estimate_onshore_wind_power(wind_speed: float) -> float:
+    """Uses wind_speed to estimate the onshore wind power production.
+    See https://docs.google.com/spreadsheets/d/1a9QbTW_9zzluov_hqcWPwHgRYNH03s1lz4pOXHQ5cew/edit?usp=sharing
+    and https://www.desmos.com/calculator/9z13kqfsx0"""
+    return force_non_negative(-e**(-0.53*(wind_speed-10))+32)
+
+def estimate_offshore_wind_power(wind_speed):
+    """Uses wind_speed to estimate the offshore wind power production.
+    See https://docs.google.com/spreadsheets/d/1a9QbTW_9zzluov_hqcWPwHgRYNH03s1lz4pOXHQ5cew/edit?usp=sharing"""
+    if wind_speed < 10:
+        return force_non_negative(map_value(wind_speed, 4.65, 9.89, 0.732, 5.465))
+    else:
+        return force_non_negative(map_value(wind_speed, 9.89, 15.16, 5.465, 4.8))
+
+SOLAR_FACTOR = {
+    "jan": 1.086,
+    "feb": 1.459,
+    "mar": 2.032,
+    "apr": 2.582,
+    "may": 2.677,
+    "jun": 2.818,
+    "jul": 3.532,
+    "aug": 3.145,
+    "sep": 2.463,
+    "oct": 2.463,
+    "nov": 2.463,
+    "dec": 1.0
+}
+
+SOLAR_CONSTANT = 7
+
+def estimate_solar_power(date: datetime.datetime, cloudiness):
+    factor = list(SOLAR_FACTOR.values())[date.month - 1]
+    return factor * (1 - cloudiness / 100 + 0.2) * SOLAR_CONSTANT * force_non_negative(sin(2 * pi / 24 * ((date.hour + date.minute / 60) - 6)))
+
+def estimate_current_solar_power(cloudiness):
+    return estimate_solar_power(datetime.datetime.now(), cloudiness)
+
+def estimate_power():
+    needed_power = estimate_currently_needed_power()
+
+    wind = get_wind_speed(HOLTRIEM_LAT, HOLTRIEM_LON)
+    onshore = estimate_onshore_wind_power(wind)
+    print(f"[INFO] wind speed Holtriem: {wind} m/s. Estimated onshore wind power: {onshore} GW")
+
+    wind = get_wind_speed(BOR_WIN_LAT, BOR_WIN_LON)
+    offshore = estimate_offshore_wind_power(wind)
+    print(f"[INFO] wind speed BorWinAlpha: {wind} m/s. Estimated offshore wind power: {offshore} GW")
+
+    cloudiness = get_cloundiness(OLDENBURG_LAT, OLDENBURG_LON)
+    solar = estimate_current_solar_power(cloudiness)
+    print(f"[INFO] cloundiness Oldenburg: {cloudiness}. Estimated solar power: {solar}")
+
+    renewable_power_supply = onshore + offshore + solar
+
+    conv_power = c if (c := needed_power - renewable_power_supply) > 0 else 0
+
+    return {
+        "onshore": onshore,
+        "offshore": offshore,
+        "solar": solar,
+        "conv": conv_power,
+        "total": needed_power
+    }
+
+def estimate_power_distribution():
+    power = estimate_power()
+
+    return {
+        "onshore": power['onshore'] / power['total'],
+        "offshore": power['offshore'] / power['total'],
+        "solar": power['solar'] / power['total'],
+        "conv": power['conv'] / power['total']
+    }
+
+def calculate_gCO2_per_kWh():
+    gCO2_per_kWh = estimate_power_distribution()['conv'] * 800
+    print(f"[INFO] estimated emission: {gCO2_per_kWh} g CO2 / kWh")
+    return gCO2_per_kWh
 
 while True:
     try:
-        weather_data = request_weather_data('Oldenburg')
-        ampel_value = calculate_ampel_value(weather_data)
-        
+        gCO2_per_kWh = calculate_gCO2_per_kWh()
+
+        ampel_value = map_value_clamp(gCO2_per_kWh, 270, 650, 0, 1)
+
         if leds_present:
             rgb_controller.set_ampel(ampel_value)
 
