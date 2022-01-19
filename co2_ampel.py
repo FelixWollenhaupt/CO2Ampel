@@ -9,7 +9,7 @@ try:
     import rgb_controller
     leds_present = True
 except ImportError:
-    print("could not import the rgb_controller or one of its dependencies")
+    print("[WARNING] could not import the rgb_controller or one of its dependencies")
     leds_present = False
 
 def map_value(x, a, b, c, d):
@@ -151,17 +151,18 @@ def calculate_gCO2_per_kWh():
     print(f"[INFO] estimated emission: {gCO2_per_kWh} g CO2 / kWh")
     return gCO2_per_kWh
 
-while True:
-    try:
-        gCO2_per_kWh = calculate_gCO2_per_kWh()
+if __name__ == "__main__":
+    while True:
+        try:
+            gCO2_per_kWh = calculate_gCO2_per_kWh()
 
-        ampel_value = map_value_clamp(gCO2_per_kWh, 270, 650, 1, 0)
+            ampel_value = map_value_clamp(gCO2_per_kWh, 270, 650, 1, 0)
 
-        if leds_present:
-            rgb_controller.set_ampel(ampel_value)
+            if leds_present:
+                rgb_controller.set_ampel(ampel_value)
 
-        sleep(60)
-    except KeyboardInterrupt:
-        if leds_present:
-            rgb_controller.quit()
-        break
+            sleep(60)
+        except KeyboardInterrupt:
+            if leds_present:
+                rgb_controller.quit()
+            break
