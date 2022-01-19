@@ -44,7 +44,6 @@ def request_weather_data(lat, lon):
     """Requests weather data using the openweathermap api."""
     with open("KEY.txt") as f:
         key = f.read().rstrip()
-    print(f"[INFO] requesting weather data at {lat}, {lon}")
     res = req.get(f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={key}")
     return json.loads(res.text)
 
@@ -111,6 +110,7 @@ def estimate_current_solar_power(cloudiness):
 
 def estimate_power():
     needed_power = estimate_currently_needed_power()
+    print(f"[INFO] estimated power consumption: {needed_power} GW")
 
     wind = get_wind_speed(HOLTRIEM_LAT, HOLTRIEM_LON)
     onshore = estimate_onshore_wind_power(wind)
@@ -155,7 +155,7 @@ while True:
     try:
         gCO2_per_kWh = calculate_gCO2_per_kWh()
 
-        ampel_value = map_value_clamp(gCO2_per_kWh, 270, 650, 0, 1)
+        ampel_value = map_value_clamp(gCO2_per_kWh, 270, 650, 1, 0)
 
         if leds_present:
             rgb_controller.set_ampel(ampel_value)
