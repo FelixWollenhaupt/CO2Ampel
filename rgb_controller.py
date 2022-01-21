@@ -1,8 +1,14 @@
+try:
+    import pigpio
+    _leds_existing = True
+except ImportError:
+    print("[WARNING] could not use GPIOs. Did you install pigpio")
+    _leds_existing = False
+
 from typing import Collection
-import pigpio
 from time import sleep
 
-pi = pigpio.pi()
+pi = pigpio.pi() if _leds_existing else None
 
 PIN_RED = 17
 PIN_GREEN = 22
@@ -27,9 +33,10 @@ def _lerp_color(color_a: Collection, color_b: Collection, amt: float) -> Collect
 
 def set_color(color: Collection) -> None:
     """sets leds to the given color"""
-    pi.set_PWM_dutycycle(PIN_RED, _ensure_valid_brightness(color[0]))
-    pi.set_PWM_dutycycle(PIN_GREEN, _ensure_valid_brightness(color[1]))
-    pi.set_PWM_dutycycle(PIN_BLUE, _ensure_valid_brightness(color[2]))
+    if _leds_existing:
+        pi.set_PWM_dutycycle(PIN_RED, _ensure_valid_brightness(color[0]))
+        pi.set_PWM_dutycycle(PIN_GREEN, _ensure_valid_brightness(color[1]))
+        pi.set_PWM_dutycycle(PIN_BLUE, _ensure_valid_brightness(color[2]))
 
 def clear() -> None:
     """clears leds"""
@@ -47,8 +54,9 @@ def set_ampel(amount: float) -> None:
 
 def quit() -> None:
     """clears the leds and stops the controll"""
-    clear()
-    pi.stop()
+    if _leds_existing:
+        clear()
+        pi.stop()
 
 
 if __name__ == "__main__":
@@ -57,4 +65,3 @@ if __name__ == "__main__":
     sleep(2)
 
     quit()
-

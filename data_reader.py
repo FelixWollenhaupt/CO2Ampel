@@ -1,5 +1,4 @@
 import datetime
-from math import dist
 import matplotlib.pyplot as plt
 
 def read_latest_n_points(n):
