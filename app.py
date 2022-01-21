@@ -3,9 +3,10 @@ from hashlib import new
 import tkinter as tk
 import datetime
 import matplotlib
+import json
 
 from co2_ampel import get_all_information, map_value_clamp, write_to_file
-from rgb_controller import set_ampel
+from rgb_controller import set_ampel, quit
 
 matplotlib.use('TkAgg')
 
@@ -133,7 +134,8 @@ class Home(AbstractModule):
             all_info = get_all_information()
             self.app.set_attr('current_data', all_info)
             write_to_file(all_info['power'])
-            self.app.set_attr('new_data', True)
+            self.app.set_attr('new_data_plot', True)
+            self.app.set_attr('new_data_weather', True)
 
             set_ampel(map_value_clamp(all_info['gpkwh'], 270, 650, 0, 1))
         
@@ -151,9 +153,9 @@ class Plot(AbstractModule):
         self.figure_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
 
     def on_update(self):
-        if self.app.get_attr('new_data'):
+        if self.app.get_attr('new_data_plot'):
             self.plot_data()
-            self.app.set_attr('new_data', False)
+            self.app.set_attr('new_data_plot', False)
 
     def plot_data(self):
         data = data_reader.read_latest_n_points(50)
@@ -179,10 +181,41 @@ class Plot(AbstractModule):
 
 
 @app.register_module
-class Weather(AbstractModule):
+class WeatherInfo(AbstractModule):
+
+    class WeatherInfoPanel(tk.Frame):
+        def __init__(self, master, app, property, *args, **kwargs):
+            super().__init__(master, *args, **kwargs)
+
+            self.app = app
+            self.label = tk.Label(self, text=property, font=("Georgia", 7), justify='left')
+            self.label.grid(row=0, column=0, sticky="nswe")
+            self.property = property
+
+        def on_update(self):
+            raw_json = app.get_attr('current_data')[self.property]
+            self.label.configure(text=json.dumps(raw_json, indent=2))
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
+        self.columnconfigure(2, weight=1)
+
+        self.weather_infos = {}
+
+        for counter, property in enumerate(('holtriem_weather', 'bor_win_weather', 'oldenburg_weather')):
+            self.weather_infos[property] = self.WeatherInfoPanel(self, self.app, property)
+            self.weather_infos[property].grid(row=0, column=counter, sticky='nswe')
+
+    def on_update(self):
+        if self.app.get_attr('new_data_weather'):
+            for property in self.weather_infos:
+                self.weather_infos[property].on_update()
+            self.app.set_attr('new_data_weather', False)
 
 if __name__ == "__main__":
     app.mainloop()
+    quit()
