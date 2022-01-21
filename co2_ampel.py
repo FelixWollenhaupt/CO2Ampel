@@ -29,8 +29,8 @@ def force_non_negative(x: float) -> float:
     return x if x > 0 else 0
 
 # coordinates of the city oldenburg
-OLDENBURG_LAT   = 51.165691
-OLDENBURG_LON   = 10.451526
+OLDENBURG_LAT   = 53.14118
+OLDENBURG_LON   = 8.21467
 
 # coordinates of the offshore wind park BorWinAlpha
 BOR_WIN_LAT     = 54.3548547
@@ -80,7 +80,7 @@ def estimate_offshore_wind_power(wind_speed):
     """Uses wind_speed to estimate the offshore wind power production.
     See https://docs.google.com/spreadsheets/d/1a9QbTW_9zzluov_hqcWPwHgRYNH03s1lz4pOXHQ5cew/edit?usp=sharing"""
     if wind_speed < 10:
-        return force_non_negative(map_value(wind_speed, 4.65, 9.89, 0.732, 5.465))
+        return force_non_negative(map_value(wind_speed, 4.65, 9.5, 0.732, 5.465))
     else:
         return force_non_negative(map_value(wind_speed, 9.89, 15.16, 5.465, 4.8))
 
@@ -103,7 +103,9 @@ SOLAR_CONSTANT = 7
 
 def estimate_solar_power(date: datetime.datetime, cloudiness):
     factor = list(SOLAR_FACTOR.values())[date.month - 1]
-    return factor * (1 - cloudiness / 100 + 0.2) * SOLAR_CONSTANT * force_non_negative(sin(2 * pi / 24 * ((date.hour + date.minute / 60) - 6)))
+    cloud_factor = 1 - cloudiness / 100 + 0.6
+    cloud_factor = map_value_clamp(cloud_factor, 0, 1, 0, 1)
+    return factor * cloud_factor * SOLAR_CONSTANT * force_non_negative(sin(2 * pi / 24 * ((date.hour + date.minute / 60) - 6)))
 
 def estimate_current_solar_power(cloudiness):
     return estimate_solar_power(datetime.datetime.now(), cloudiness)
@@ -114,19 +116,20 @@ def estimate_power():
 
     wind = get_wind_speed(HOLTRIEM_LAT, HOLTRIEM_LON)
     onshore = estimate_onshore_wind_power(wind)
-    print(f"[INFO] wind speed Holtriem: {wind} m/s. Estimated onshore wind power: {onshore} GW")
+    print(f"[INFO] wind speed Holtriem: {wind} m/s.\tEstimated onshore wind power: {onshore} GW")
 
     wind = get_wind_speed(BOR_WIN_LAT, BOR_WIN_LON)
     offshore = estimate_offshore_wind_power(wind)
-    print(f"[INFO] wind speed BorWinAlpha: {wind} m/s. Estimated offshore wind power: {offshore} GW")
+    print(f"[INFO] wind speed BorWinAlpha: {wind} m/s.\tEstimated offshore wind power: {offshore} GW")
 
     cloudiness = get_cloundiness(OLDENBURG_LAT, OLDENBURG_LON)
     solar = estimate_current_solar_power(cloudiness)
-    print(f"[INFO] cloundiness Oldenburg: {cloudiness}. Estimated solar power: {solar}")
+    print(f"[INFO] cloundiness Oldenburg: {cloudiness}%.\tEstimated solar power: {solar} GW")
 
     renewable_power_supply = onshore + offshore + solar
 
     conv_power = force_non_negative(needed_power - renewable_power_supply)
+    print(f"[INFO] estimated conv power: {conv_power} GW")
 
     return {
         "onshore": onshore,
@@ -136,8 +139,9 @@ def estimate_power():
         "total": needed_power
     }
 
-def estimate_power_distribution():
-    power = estimate_power()
+def estimate_power_distribution(power = None):
+    if power == None:
+        power = estimate_power()
 
     return {
         "onshore": power['onshore'] / power['total'],
@@ -146,22 +150,28 @@ def estimate_power_distribution():
         "conv": power['conv'] / power['total']
     }
 
-def calculate_gCO2_per_kWh():
-    gCO2_per_kWh = estimate_power_distribution()['conv'] * 800
+def calculate_gCO2_per_kWh(power_distribution = None):
+    if power_distribution == None:
+        power_distribution = estimate_power_distribution()
+    gCO2_per_kWh = power_distribution['conv'] * 800
     print(f"[INFO] estimated emission: {gCO2_per_kWh} g CO2 / kWh")
     return gCO2_per_kWh
 
 if __name__ == "__main__":
     while True:
         try:
-            gCO2_per_kWh = calculate_gCO2_per_kWh()
+            power = estimate_power()
+            gCO2_per_kWh = calculate_gCO2_per_kWh(estimate_power_distribution(power))
 
             ampel_value = map_value_clamp(gCO2_per_kWh, 270, 650, 1, 0)
 
             if leds_present:
                 rgb_controller.set_ampel(ampel_value)
 
-            sleep(60)
+            with open("data/data.csv", "a") as f:
+                f.write(','.join((str(datetime.datetime.now()), *[str(a) for a in power.values()], str(gCO2_per_kWh))) + '\n')
+
+            sleep(60*5)
         except KeyboardInterrupt:
             if leds_present:
                 rgb_controller.quit()
