@@ -4,7 +4,8 @@ import tkinter as tk
 import datetime
 import matplotlib
 
-from co2_ampel import get_all_information
+from co2_ampel import get_all_information, map_value_clamp, write_to_file
+from rgb_controller import set_ampel
 
 matplotlib.use('TkAgg')
 
@@ -129,8 +130,12 @@ class Home(AbstractModule):
 
     def process_data(self):
         if self.app.get_attr('running'):
-            self.app.set_attr('current_data', get_all_information())
+            all_info = get_all_information()
+            self.app.set_attr('current_data', all_info)
+            write_to_file(all_info['power'])
             self.app.set_attr('new_data', True)
+
+            set_ampel(map_value_clamp(all_info['gpkwh'], 270, 650, 0, 1))
         
 
 
