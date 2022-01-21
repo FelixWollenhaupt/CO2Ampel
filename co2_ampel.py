@@ -47,12 +47,12 @@ def request_weather_data(lat, lon):
     res = req.get(f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={key}")
     return json.loads(res.text)
 
-def get_wind_speed(lat, lon):
-    weather_data = request_weather_data(lat, lon)
+def get_wind_speed(weather_data=None, lat=None, lon=None):
+    weather_data = request_weather_data(lat, lon) if weather_data == None else weather_data
     return weather_data['wind']['speed']
 
-def get_cloundiness(lat, lon):
-    weather_data = request_weather_data(lat, lon)
+def get_cloundiness(weather_data=None, lat=None, lon=None):
+    weather_data = request_weather_data(lat, lon) if weather_data == None else weather_data
     return weather_data['clouds']['all']
 
 def estimate_needed_power(time: datetime.time, average: float = 60, deviation: float = 20):
@@ -110,26 +110,28 @@ def estimate_solar_power(date: datetime.datetime, cloudiness):
 def estimate_current_solar_power(cloudiness):
     return estimate_solar_power(datetime.datetime.now(), cloudiness)
 
-def estimate_power():
+def estimate_power(holtriem_wind=None, bor_win_wind=None, cloudiness=None, log=True):
     needed_power = estimate_currently_needed_power()
-    print(f"[INFO] estimated power consumption: {needed_power} GW")
 
-    wind = get_wind_speed(HOLTRIEM_LAT, HOLTRIEM_LON)
-    onshore = estimate_onshore_wind_power(wind)
-    print(f"[INFO] wind speed Holtriem: {wind} m/s.\tEstimated onshore wind power: {onshore} GW")
+    h_wind = get_wind_speed(lat=HOLTRIEM_LAT, lon=HOLTRIEM_LON) if holtriem_wind == None else holtriem_wind
+    onshore = estimate_onshore_wind_power(h_wind)
 
-    wind = get_wind_speed(BOR_WIN_LAT, BOR_WIN_LON)
-    offshore = estimate_offshore_wind_power(wind)
-    print(f"[INFO] wind speed BorWinAlpha: {wind} m/s.\tEstimated offshore wind power: {offshore} GW")
+    b_wind = get_wind_speed(lat=BOR_WIN_LAT, lon=BOR_WIN_LON) if bor_win_wind == None else bor_win_wind
+    offshore = estimate_offshore_wind_power(b_wind)
 
-    cloudiness = get_cloundiness(OLDENBURG_LAT, OLDENBURG_LON)
+    cloudiness = get_cloundiness(lat=OLDENBURG_LAT, lon=OLDENBURG_LON) if cloudiness == None else cloudiness
     solar = estimate_current_solar_power(cloudiness)
-    print(f"[INFO] cloundiness Oldenburg: {cloudiness}%.\tEstimated solar power: {solar} GW")
 
     renewable_power_supply = onshore + offshore + solar
 
     conv_power = force_non_negative(needed_power - renewable_power_supply)
-    print(f"[INFO] estimated conv power: {conv_power} GW")
+
+    if log:
+        print(f"[INFO] estimated power consumption: {needed_power} GW")
+        print(f"[INFO] wind speed Holtriem: {h_wind} m/s.\tEstimated onshore wind power: {onshore} GW")
+        print(f"[INFO] wind speed BorWinAlpha: {b_wind} m/s.\tEstimated offshore wind power: {offshore} GW")
+        print(f"[INFO] cloundiness Oldenburg: {cloudiness}%.\tEstimated solar power: {solar} GW")
+        print(f"[INFO] estimated conv power: {conv_power} GW")
 
     return {
         "onshore": onshore,
@@ -150,26 +152,58 @@ def estimate_power_distribution(power = None):
         "conv": power['conv'] / power['total']
     }
 
-def calculate_gCO2_per_kWh(power_distribution = None):
+def calculate_gCO2_per_kWh(power_distribution = None, log=True):
     if power_distribution == None:
         power_distribution = estimate_power_distribution()
     gCO2_per_kWh = power_distribution['conv'] * 800
-    print(f"[INFO] estimated emission: {gCO2_per_kWh} g CO2 / kWh")
+    if log:
+        print(f"[INFO] estimated emission: {gCO2_per_kWh} g CO2 / kWh")
     return gCO2_per_kWh
+
+def get_all_information():
+    h_weather = request_weather_data(HOLTRIEM_LAT, HOLTRIEM_LON)
+    h_wind = get_wind_speed(h_weather)
+    b_weather = request_weather_data(BOR_WIN_LAT, BOR_WIN_LON)
+    b_wind = get_wind_speed(b_weather)
+    o_weather = request_weather_data(OLDENBURG_LAT, OLDENBURG_LON)
+    cloudiness = get_cloundiness(o_weather)
+    power = estimate_power(holtriem_wind=h_wind, bor_win_wind= b_wind, cloudiness=cloudiness)
+    power_dist = estimate_power_distribution(power)
+    gpkwh = calculate_gCO2_per_kWh(power_distribution=power_dist)
+
+    return {
+        'holtriem_weather': h_weather,
+        'bor_win_weather': b_weather,
+        'oldenburg_weather': o_weather,
+        'holtriem_wind': h_wind,
+        'bor_win_wind': b_wind,
+        'cloudiness': cloudiness,
+        'power': power,
+        'power_dist': power_dist,
+        'gpkwh': gpkwh
+    }
+
+
+def write_to_file(power):
+    gCO2_per_kWh = calculate_gCO2_per_kWh(estimate_power_distribution(power), log=False)
+
+    with open("data/data.csv", "a") as f:
+                f.write(','.join((str(datetime.datetime.now()), *[str(a) for a in power.values()], str(gCO2_per_kWh))) + '\n')
+
 
 if __name__ == "__main__":
     while True:
         try:
-            power = estimate_power()
-            gCO2_per_kWh = calculate_gCO2_per_kWh(estimate_power_distribution(power))
+            all = get_all_information()
+            power = all['power']
+            gCO2_per_kWh = all['gpkwh']
+            write_to_file(power)
 
-            ampel_value = map_value_clamp(gCO2_per_kWh, 270, 650, 1, 0)
+            ampel_value = map_value_clamp(gCO2_per_kWh, 270, 650, 0, 1)
+            print(ampel_value)
 
             if leds_present:
                 rgb_controller.set_ampel(ampel_value)
-
-            with open("data/data.csv", "a") as f:
-                f.write(','.join((str(datetime.datetime.now()), *[str(a) for a in power.values()], str(gCO2_per_kWh))) + '\n')
 
             sleep(60*5)
         except KeyboardInterrupt:
