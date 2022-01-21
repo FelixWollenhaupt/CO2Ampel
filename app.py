@@ -55,7 +55,6 @@ class CO2AmpelGUI(tk.Tk):
     def enable_module(self, module):
         self.active_module = module
         self.modules[module].tkraise()
-        print(f"enabling {module}")
 
     def mainloop(self, *args, **kwargs):
         if len(self.modules):
@@ -116,19 +115,22 @@ class Home(AbstractModule):
         self.run_button = tk.Button(self.config_frame, command=self.on_run_click, **self.NOT_RUNNING_BUTTON_CONFIG)#
         self.run_button.pack()
 
-        self.process_data()
+        self.process_data_loop()
 
     def on_run_click(self):
         new_state = not self.app.get_attr('running')
-        print(new_state)
         self.app.set_attr('running', new_state)
         self.run_button.configure(self.RUNNING_BUTTON_CONFIG if new_state else self.NOT_RUNNING_BUTTON_CONFIG)
+        self.process_data()
+
+    def process_data_loop(self):
+        self.process_data()
+        self.after(1000*60, self.process_data_loop)
 
     def process_data(self):
         if self.app.get_attr('running'):
             self.app.set_attr('current_data', get_all_information())
             self.app.set_attr('new_data', True)
-        self.after(1000*60, self.process_data)
         
 
 
@@ -144,14 +146,12 @@ class Plot(AbstractModule):
         self.figure_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
 
     def on_update(self):
-        # self.plot_data()
-        print(self.app.get_attr('new_data'))
         if self.app.get_attr('new_data'):
             self.plot_data()
             self.app.set_attr('new_data', False)
 
     def plot_data(self):
-        data = data_reader.read_latest_n_points(10)
+        data = data_reader.read_latest_n_points(50)
         time, distribution, total, gpkwh = data_reader.convert_to_plot_data(data)
 
         self.ax.clear()
