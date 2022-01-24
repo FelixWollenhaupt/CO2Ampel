@@ -36,10 +36,18 @@ BOR_WIN_LON     = 6.02508583
 HOLTRIEM_LAT    = 53.610278
 HOLTRIEM_LON    = 7.429167
 
+
+KEY = None
+def load_api_key():
+    global KEY
+    if KEY == None:
+        with open("KEY.txt") as f:
+            KEY = f.read().rstrip()
+    return KEY
+
 def request_weather_data(lat, lon):
     """Requests weather data using the openweathermap api."""
-    with open("KEY.txt") as f:
-        key = f.read().rstrip()
+    key = load_api_key()
     res = req.get(f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={key}")
     return json.loads(res.text)
 
