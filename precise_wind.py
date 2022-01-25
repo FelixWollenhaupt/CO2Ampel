@@ -1,10 +1,11 @@
+from pprint import pprint
 from typing import Dict, Tuple
 
-from co2_ampel import force_non_negative, map_value, request_weather_data
+from util import force_non_negative, map_value, request_weather_data
 
 # from wikipedia: 'Liste der größten deutschen Onshore-Windparks'
 # key: (lat, lon), value: power in MW
-windpark_dict: Dict[Tuple[float, float], float] = {
+onshore_windpark_dict: Dict[Tuple[float, float], float] = {
     (48.4424, 9.5323): 52.25,
     (48.5851, 11.069): 52.8,
     (49.1746, 9.2456): 54.9,
@@ -81,23 +82,59 @@ windpark_dict: Dict[Tuple[float, float], float] = {
     (54.3855, 9.1035): 42
 }
 
-AVG_POWER = 85.82513333
 
-def request_wind_speeds():
+offshore_windpark_dict = {
+    (53.4124, 6.2848): 113.4,
+    (53.5, 8.1): 110.7,
+    (53.5721, 6.2945): 464.8,
+    (53.58, 6.33): 312,
+    (53.58, 6.48): 332.1,
+    (54.003, 6.3554): 60.48,
+    (54.1818, 5.4756): 260.4,
+    (54.1901, 5.5215): 402,
+    (54.2, 6.33): 396,
+    (54.213, 5.583): 400,
+    (54.23, 7.41): 288,
+    (54.246, 6.2725): 200,
+    (54.26, 6.19): 497,
+    (54.26, 7.41): 295.2,
+    (54.3, 6.213): 400,
+    (54.3, 6.24): 112,
+    (54.3, 6.2758): 203.2,
+    (54.3, 7.01): 264,
+    (54.3, 7.48): 302.4,
+    (54.3632, 12.3904): 48.3,
+    (54.4, 7.02): 346,
+    (54.4655, 14.0716): 384,
+    (54.5002, 14.0405): 353.5,
+    (54.54, 7.45): 288,
+    (54.5855, 13.0943): 288,
+    (55.11, 6.51): 288,
+    (55.9, 7.103): 302.4
+}
+
+def request_wind_speeds(location_dict):
+    """requests the windspeeds of all the locations above.
+    Returns dict with key (lat, lon) and value wind_speed"""
     wind_speed = {}
-    for lat, lon in windpark_dict:
-        print(f"[INFO] requesting weather at {lat}, {lon}")
+    for lat, lon in location_dict:
         weather = request_weather_data(lat, lon)
         wind_speed[(lat, lon)] = weather['wind']['speed']
 
-    print(wind_speed)
     return wind_speed
 
-def estimate_onshore_wind_power_precise():
+def calculate_average_weighted_wind_speed(location_weight_dict):
+
     weighted_wind_speeds = {}
-    wind_speeds = request_wind_speeds()
+    wind_speeds = request_wind_speeds(location_weight_dict)
+
+    sum = 0
+    for location in location_weight_dict:
+        sum += location_weight_dict[location]
+    average_power = sum / len(location_weight_dict)
+
     for location in wind_speeds:
-        weighted_wind_speeds[location] = wind_speeds[location] * windpark_dict[location] / AVG_POWER
+        weighted_wind_speeds[location] = wind_speeds[location] * location_weight_dict[location] / average_power
 
     sum = 0
     for location in weighted_wind_speeds:
@@ -105,6 +142,16 @@ def estimate_onshore_wind_power_precise():
 
     average_weighted_wind_speed = sum / len(weighted_wind_speeds)
 
+    return average_weighted_wind_speed
+
+def estimate_onshore_wind_power_precise():
+    average_weighted_wind_speed = calculate_average_weighted_wind_speed(onshore_windpark_dict)
     return force_non_negative(map_value(average_weighted_wind_speed, 3, 10, 7.3, 35))
 
-print(estimate_onshore_wind_power_precise())
+def estimate_offshore_wind_power_precise():
+    average_weighted_wind_speed = calculate_average_weighted_wind_speed(offshore_windpark_dict)
+    return force_non_negative(map_value(average_weighted_wind_speed, 1.92, 5.71, 2.65, 4.05))
+
+if __name__ == "__main__":
+    print(estimate_offshore_wind_power_precise())
+    pass

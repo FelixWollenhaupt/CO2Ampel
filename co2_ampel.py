@@ -1,55 +1,14 @@
-from typing import Dict
-import requests as req
-import json
-from time import sleep
 import datetime
-from math import sin, pi, e
+from math import e, pi, sin
+from time import sleep
+from typing import Dict
 
+import requests as req
 
 import rgb_controller
+from precise_wind import estimate_offshore_wind_power_precise, estimate_onshore_wind_power_precise
+from util import *
 
-def map_value(x, a, b, c, d):
-    """maps the value x in relation to a and b to c and d"""
-    return ((c - d) * (x - a)) / (a - b) + c
-
-def map_value_clamp(x, a, b, c, d):
-    """maps the value x in relation to a and b to c and d, then clamps it to that range"""
-    v = map_value(x, a, b, c, d)
-    if v < c and v < d:
-        return min(c, d)
-    elif v > c and v > d:
-        return max(c, d)
-    return v
-
-def force_non_negative(x: float) -> float:
-    return x if x > 0 else 0
-
-# coordinates of the city oldenburg
-OLDENBURG_LAT   = 53.14118
-OLDENBURG_LON   = 8.21467
-
-# coordinates of the offshore wind park BorWinAlpha
-BOR_WIN_LAT     = 54.3548547
-BOR_WIN_LON     = 6.02508583
-
-# coordinates of the onshore wind park Holtriem
-HOLTRIEM_LAT    = 53.610278
-HOLTRIEM_LON    = 7.429167
-
-
-KEY = None
-def load_api_key():
-    global KEY
-    if KEY == None:
-        with open("KEY.txt") as f:
-            KEY = f.read().rstrip()
-    return KEY
-
-def request_weather_data(lat, lon):
-    """Requests weather data using the openweathermap api."""
-    key = load_api_key()
-    res = req.get(f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={key}")
-    return json.loads(res.text)
 
 def get_wind_speed(weather_data=None, lat=None, lon=None):
     """Returns the wind speed from a specified weather_data dict or if no weather_data is 
@@ -119,17 +78,23 @@ def estimate_solar_power(date: datetime.datetime, cloudiness):
 def estimate_current_solar_power(cloudiness):
     return estimate_solar_power(datetime.datetime.now(), cloudiness)
 
-def estimate_power(holtriem_wind=None, bor_win_wind=None, cloudiness=None, log=True):
+def estimate_power(holtriem_wind=None, bor_win_wind=None, cloudiness=None, use_precise=False, log=True):
     """estimates the current power. if no parameters are provided, it will request 
     everything it needs automatically. However, you can specify the wind speeds and the cloundiness.
     If the parameter log is set to False, it will not print information to stdout"""
     needed_power = estimate_currently_needed_power()
 
-    h_wind = get_wind_speed(lat=HOLTRIEM_LAT, lon=HOLTRIEM_LON) if holtriem_wind == None else holtriem_wind
-    onshore = estimate_onshore_wind_power(h_wind)
+    if not use_precise:
+        h_wind = get_wind_speed(lat=HOLTRIEM_LAT, lon=HOLTRIEM_LON) if holtriem_wind == None else holtriem_wind
+        onshore = estimate_onshore_wind_power(h_wind)
 
-    b_wind = get_wind_speed(lat=BOR_WIN_LAT, lon=BOR_WIN_LON) if bor_win_wind == None else bor_win_wind
-    offshore = estimate_offshore_wind_power(b_wind)
+        b_wind = get_wind_speed(lat=BOR_WIN_LAT, lon=BOR_WIN_LON) if bor_win_wind == None else bor_win_wind
+        offshore = estimate_offshore_wind_power(b_wind)
+    else:
+        h_wind = None
+        onshore = estimate_onshore_wind_power_precise()
+        b_wind = None
+        offshore = estimate_offshore_wind_power_precise()
 
     cloudiness = get_cloudiness(lat=OLDENBURG_LAT, lon=OLDENBURG_LON) if cloudiness == None else cloudiness
     solar = estimate_current_solar_power(cloudiness)
@@ -177,26 +142,32 @@ def calculate_gCO2_per_kWh(power_distribution = None, log=True):
         print(f"[INFO] estimated emission: {gCO2_per_kWh} g CO2 / kWh")
     return gCO2_per_kWh
 
-def get_all_information():
+def get_all_information(use_precise=False):
     """performs all calculations and returns all information in a dict. Returns: \n
     {
-        'holtriem_weather': full weather_data dict in Holtriem, DE
-        'bor_win_weather': full weather_data dict at the BorWinAlpha offshore windpark
+        'holtriem_weather': full weather_data dict in Holtriem, DE. None if use_precise is True
+        'bor_win_weather': full weather_data dict at the BorWinAlpha offshore windpark. None if use_precise is True
         'oldenburg_weather': full weather_data dict in Oldenburg, DE
-        'holtriem_wind': wind speed in Holtriem, DE,
-        'bor_win_wind': wind speed at the BorWinAlpha offshore windpark
+        'holtriem_wind': wind speed in Holtriem, DE. None if use_precise is True
+        'bor_win_wind': wind speed at the BorWinAlpha offshore windpark. None if use_precise is True
         'cloudiness': cloudiness in percent in Oldenburg, DE
         'power': dict of the absolut current power. Devided into 'onshore', 'offshore', 'solar', 'conv', 'total'
         'power_dist': percentage of the total power. Devided into 'onshore', 'offshore', 'solar', 'conv'
         'gpkwh': gramm CO2 emission per kWh energy
     }"""
-    h_weather = request_weather_data(HOLTRIEM_LAT, HOLTRIEM_LON)
-    h_wind = get_wind_speed(h_weather)
-    b_weather = request_weather_data(BOR_WIN_LAT, BOR_WIN_LON)
-    b_wind = get_wind_speed(b_weather)
+    if not use_precise:
+        h_weather = request_weather_data(HOLTRIEM_LAT, HOLTRIEM_LON)
+        h_wind = get_wind_speed(h_weather)
+        b_weather = request_weather_data(BOR_WIN_LAT, BOR_WIN_LON)
+        b_wind = get_wind_speed(b_weather)
+    else:
+        h_weather = None
+        h_wind = None
+        b_weather = None
+        b_wind = None
     o_weather = request_weather_data(OLDENBURG_LAT, OLDENBURG_LON)
     cloudiness = get_cloudiness(o_weather)
-    power = estimate_power(holtriem_wind=h_wind, bor_win_wind= b_wind, cloudiness=cloudiness)
+    power = estimate_power(holtriem_wind=h_wind, bor_win_wind= b_wind, cloudiness=cloudiness, use_precise=use_precise)
     power_dist = estimate_power_distribution(power)
     gpkwh = calculate_gCO2_per_kWh(power_distribution=power_dist)
 
@@ -225,7 +196,7 @@ def write_to_file(power):
 if __name__ == "__main__":
     while True:
         try:
-            all = get_all_information()
+            all = get_all_information(use_precise=False)
             power = all['power']
             gCO2_per_kWh = all['gpkwh']
             write_to_file(power)
