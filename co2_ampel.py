@@ -81,7 +81,8 @@ def estimate_current_solar_power(cloudiness):
 def estimate_power(holtriem_wind=None, bor_win_wind=None, cloudiness=None, use_precise=False, log=True):
     """estimates the current power. if no parameters are provided, it will request 
     everything it needs automatically. However, you can specify the wind speeds and the cloundiness.
-    If the parameter log is set to False, it will not print information to stdout"""
+    If the parameter log is set to False, it will not print information to stdout. \n
+    Be carefull with the 'use_precise' parameter. Calling this function with use_precise=True will result in more than 100 API calls."""
     needed_power = estimate_currently_needed_power()
 
     if not use_precise:
@@ -118,12 +119,12 @@ def estimate_power(holtriem_wind=None, bor_win_wind=None, cloudiness=None, use_p
         "total": needed_power
     }
 
-def estimate_power_distribution(power = None) -> Dict[str, float]:
+def estimate_power_distribution(power=None, use_precise=False) -> Dict[str, float]:
     """estimates the current percentage of the onshore, offshore, solar and conventional power in the local grid.
-    If the power parameter is not provided, it will automatically fetch the neede data.
-    """
+    If the power parameter is not provided, it will automatically fetch the neede data.\n
+    Be carefull with the 'use_precise' parameter. Calling this function with use_precise=True will result in more than 100 API calls."""
     if power == None:
-        power = estimate_power()
+        power = estimate_power(use_precise=use_precise)
 
     return {
         "onshore": power['onshore'] / power['total'],
@@ -132,11 +133,12 @@ def estimate_power_distribution(power = None) -> Dict[str, float]:
         "conv": power['conv'] / power['total']
     }
 
-def calculate_gCO2_per_kWh(power_distribution = None, log=True):
+def calculate_gCO2_per_kWh(power_distribution = None, use_precise=False, log=True):
     """calculates the CO2 emission per kWh Energy. If no parameter is provided, it will automatically
-    fetch the data it needs."""
+    fetch the data it needs.\n
+    Be carefull with the 'use_precise' parameter. Calling this function with use_precise=True will result in more than 100 API calls."""
     if power_distribution == None:
-        power_distribution = estimate_power_distribution()
+        power_distribution = estimate_power_distribution(use_precise=use_precise)
     gCO2_per_kWh = power_distribution['conv'] * 800
     if log:
         print(f"[INFO] estimated emission: {gCO2_per_kWh} g CO2 / kWh")
@@ -154,7 +156,8 @@ def get_all_information(use_precise=False):
         'power': dict of the absolut current power. Devided into 'onshore', 'offshore', 'solar', 'conv', 'total'
         'power_dist': percentage of the total power. Devided into 'onshore', 'offshore', 'solar', 'conv'
         'gpkwh': gramm CO2 emission per kWh energy
-    }"""
+    }\n
+    Be carefull with the 'use_precise' parameter. Calling this function with use_precise=True will result in more than 100 API calls."""
     if not use_precise:
         h_weather = request_weather_data(HOLTRIEM_LAT, HOLTRIEM_LON)
         h_wind = get_wind_speed(h_weather)
@@ -196,7 +199,7 @@ def write_to_file(power):
 if __name__ == "__main__":
     while True:
         try:
-            all = get_all_information(use_precise=False)
+            all = get_all_information(use_precise=True)
             power = all['power']
             gCO2_per_kWh = all['gpkwh']
             write_to_file(power)
@@ -206,7 +209,7 @@ if __name__ == "__main__":
 
             rgb_controller.set_ampel(ampel_value)
 
-            sleep(60*5)
+            sleep(60*10)
         except KeyboardInterrupt:
             rgb_controller.quit()
             break

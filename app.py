@@ -1,5 +1,3 @@
-from ast import arg
-from hashlib import new
 import tkinter as tk
 import datetime
 import matplotlib
@@ -77,7 +75,7 @@ class CO2AmpelGUI(tk.Tk):
 
 class AbstractModule(tk.Frame):
     def __init__(self, app, *args, **kwargs):
-        self.app = app
+        self.app: CO2AmpelGUI = app
         super().__init__(*args, **kwargs)
 
     def on_update(self):
@@ -98,12 +96,12 @@ class Home(AbstractModule):
         self.text_frame = tk.Frame(self)
         self.text_frame.grid(row=0, column=0, sticky='nswe')
         tk.Label(self.text_frame, text="Welcome to the CO2Ampel", font=('Georgia', 30)).pack(fill=tk.BOTH, expand=1)
-        tk.Label(self.text_frame, text="Lorem ipsum bla bla bla", font=('Georgia', 14)).pack(fill=tk.BOTH, expand=1)
 
         self.config_frame = tk.Frame(self)
         self.config_frame.grid(row=1, column=0, sticky='nswe')
 
         self.app.set_attr('running', False)
+        self.app.set_attr('use_precise', False)
 
         self.NOT_RUNNING_BUTTON_CONFIG = {
             'text': 'start CO2Ampel',
@@ -114,24 +112,70 @@ class Home(AbstractModule):
             'bg': "green"
         }
 
-        self.run_button = tk.Button(self.config_frame, command=self.on_run_click, **self.NOT_RUNNING_BUTTON_CONFIG)#
-        self.run_button.pack()
+        self.config_frame.columnconfigure(0, weight=1)
+        self.config_frame.rowconfigure(0, weight=1)
+        self.config_frame.rowconfigure(1, weight=1)
+        self.config_frame.rowconfigure(2, weight=1)
+        self.config_frame.rowconfigure(3, weight=1)
 
-        self.process_data_loop()
+        self.run_button = tk.Button(self.config_frame, command=self.on_run_click, **self.NOT_RUNNING_BUTTON_CONFIG)
+        self.run_button.grid(row=0, column=0, sticky='nswe', padx=50, pady=10)
+
+        self.precision_button = tk.Button(self.config_frame, command=self.on_precision_click, text='activate precise mode')
+        self.precision_button.grid(row=1, column=0, sticky='nswe', padx=50, pady=10)
+
+        tk.Button(self.config_frame, command=self.on_delte_data_click, text='delete plot data').grid(row=2, column=0, sticky='nswe', padx=50, pady=10)
+
+        self.delta_frame = tk.Frame(self.config_frame)
+        self.delta_frame.grid(row=3, column=0, sticky='nswe', padx=50, pady=10)
+
+        self.delta_frame.columnconfigure(0, weight=1)
+        self.delta_frame.columnconfigure(1, weight=1)
+        self.delta_frame.rowconfigure(0, weight=1)
+
+        self.delta_time = 1
+
+        self.delta_time_entry = tk.Entry(self.delta_frame)
+        self.delta_time_entry.insert(0, str(self.delta_time))
+        self.delta_time_entry.grid(row=0, column=0, sticky='nswe')
+
+        tk.Button(self.delta_frame, command=self.on_delta_time_button, text='set delta time').grid(row=0, column=1, sticky='nswe')
+
+        self.loop_started = False
 
     def on_run_click(self):
+        if not self.loop_started:
+            self.process_data_loop()
         new_state = not self.app.get_attr('running')
         self.app.set_attr('running', new_state)
         self.run_button.configure(self.RUNNING_BUTTON_CONFIG if new_state else self.NOT_RUNNING_BUTTON_CONFIG)
         self.process_data()
 
+    def on_precision_click(self):
+        new_state = not self.app.get_attr('use_precise')
+        self.app.set_attr('use_precise', new_state)
+        self.precision_button.configure(text='deactivate precise mode' if new_state else 'activate precise mode')
+
+    def on_delte_data_click(self):
+        with open('data/data.csv', 'r+') as data_file, open('data/data.csv.old', 'w') as old_file:
+            data_content = data_file.read()
+            print(data_content)
+            old_file.write(data_content)
+
+        with open('data/data.csv', 'w'):
+            pass
+
+    def on_delta_time_button(self):
+        self.delta_time = float(self.delta_time_entry.get())
+
     def process_data_loop(self):
+        self.loop_started = True
         self.process_data()
-        self.after(1000*60, self.process_data_loop)
+        self.after(int(1000 * 60 * self.delta_time), self.process_data_loop)
 
     def process_data(self):
         if self.app.get_attr('running'):
-            all_info = get_all_information()
+            all_info = get_all_information(use_precise=self.app.get_attr('use_precise'))
             self.app.set_attr('current_data', all_info)
             write_to_file(all_info['power'])
             self.app.set_attr('new_data_plot', True)
@@ -170,7 +214,7 @@ class Plot(AbstractModule):
         self.ax.xaxis.set_major_formatter(lambda x, pos: datetime.datetime.fromtimestamp(x).strftime("%H:%M"))
 
         ax2 = self.ax.twinx()
-        ax2.set_ylim(200, 720)
+        ax2.set_ylim(200, 900)
         ax2.plot(time, gpkwh, 'black', label='emission')
         ax2.set_ylabel('g CO2 per kWh')
 

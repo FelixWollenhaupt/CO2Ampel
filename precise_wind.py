@@ -5,7 +5,7 @@ from util import force_non_negative, map_value, request_weather_data
 
 # from wikipedia: 'Liste der größten deutschen Onshore-Windparks'
 # key: (lat, lon), value: power in MW
-onshore_windpark_dict: Dict[Tuple[float, float], float] = {
+ONSHORE_WINDPARK_DICT: Dict[Tuple[float, float], float] = {
     (48.4424, 9.5323): 52.25,
     (48.5851, 11.069): 52.8,
     (49.1746, 9.2456): 54.9,
@@ -83,7 +83,7 @@ onshore_windpark_dict: Dict[Tuple[float, float], float] = {
 }
 
 
-offshore_windpark_dict = {
+OFFSHORE_WINDPARK_DICT = {
     (53.4124, 6.2848): 113.4,
     (53.5, 8.1): 110.7,
     (53.5721, 6.2945): 464.8,
@@ -114,7 +114,8 @@ offshore_windpark_dict = {
 }
 
 def request_wind_speeds(location_dict):
-    """requests the windspeeds of all the locations above.
+    """requests the windspeeds specified in the location dict.
+    The key of the provided dict has to be in the format (lat, lon).
     Returns dict with key (lat, lon) and value wind_speed"""
     wind_speed = {}
     for lat, lon in location_dict:
@@ -124,7 +125,9 @@ def request_wind_speeds(location_dict):
     return wind_speed
 
 def calculate_average_weighted_wind_speed(location_weight_dict):
-
+    """Calculates the average wind speed at the (lat, lon) provided by the keys of location_weight_dict.
+    The value at each (lat, lon) key is used to weight the wind speed.
+    The average weighted wind speed con be used to calculate powers on a grid."""
     weighted_wind_speeds = {}
     wind_speeds = request_wind_speeds(location_weight_dict)
 
@@ -145,11 +148,19 @@ def calculate_average_weighted_wind_speed(location_weight_dict):
     return average_weighted_wind_speed
 
 def estimate_onshore_wind_power_precise():
-    average_weighted_wind_speed = calculate_average_weighted_wind_speed(onshore_windpark_dict)
+    """Estimates the onshore wind power using weather information of 74 locations all over germany and the capacity of windparks located there.
+    This location data is provided in the ONSHORE_WINDPARK_DICT.
+    Be carefull with this function! Calling it results in 74 API calls.
+    See https://docs.google.com/spreadsheets/d/1a9QbTW_9zzluov_hqcWPwHgRYNH03s1lz4pOXHQ5cew/edit?usp=sharing for data."""
+    average_weighted_wind_speed = calculate_average_weighted_wind_speed(ONSHORE_WINDPARK_DICT)
     return force_non_negative(map_value(average_weighted_wind_speed, 3, 10, 7.3, 35))
 
 def estimate_offshore_wind_power_precise():
-    average_weighted_wind_speed = calculate_average_weighted_wind_speed(offshore_windpark_dict)
+    """Estimates the offshore wind power using weather information of 27 locations in the north- and baltic sea and the capacity of windparks located there.
+    This location data is provided in the OFFSHORE_WINDPARK_DICT.
+    Be carefull with this function! Calling it results in 27 API calls.
+    See https://docs.google.com/spreadsheets/d/1a9QbTW_9zzluov_hqcWPwHgRYNH03s1lz4pOXHQ5cew/edit?usp=sharing for data."""
+    average_weighted_wind_speed = calculate_average_weighted_wind_speed(OFFSHORE_WINDPARK_DICT)
     return force_non_negative(map_value(average_weighted_wind_speed, 1.92, 5.71, 2.65, 4.05))
 
 if __name__ == "__main__":
