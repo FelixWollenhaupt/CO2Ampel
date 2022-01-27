@@ -204,7 +204,7 @@ if __name__ == "__main__":
             gCO2_per_kWh = all['gpkwh']
             write_to_file(power)
 
-            ampel_value = map_value_clamp(gCO2_per_kWh, 270, 650, 0, 1)
+            ampel_value = map_value_clamp(gCO2_per_kWh, 200, 700, 0, 1)
             print(ampel_value)
 
             rgb_controller.set_ampel(ampel_value)

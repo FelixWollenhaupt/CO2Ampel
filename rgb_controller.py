@@ -60,7 +60,12 @@ def quit() -> None:
 
 
 if __name__ == "__main__":
-    set_ampel(0.8)
+    for i in range(11):
+        v = i/10
+        set_ampel(v)
+        print(v)
+        sleep(0.5)
+
     
     sleep(2)
 

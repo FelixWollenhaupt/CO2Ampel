@@ -197,6 +197,7 @@ class Plot(AbstractModule):
         self.figure_canvas = FigureCanvasTkAgg(self.figure, self)
         NavigationToolbar2Tk(self.figure_canvas, self)
         self.ax = self.figure.add_subplot()
+        self.ax2 = self.ax.twinx()
         self.figure_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
 
     def on_update(self):
@@ -214,9 +215,7 @@ class Plot(AbstractModule):
         self.ax.plot(time, total, label='total')
         self.ax.set_xlabel('time')
         self.ax.set_ylabel('power in GW')
-        self.ax.xaxis.set_major_formatter(lambda x, pos: datetime.datetime.fromtimestamp(x).strftime("%H:%M"))
 
-        self.ax2 = self.ax.twinx()
         self.ax2.clear()
         self.ax2.set_ylim(200, 900)
         self.ax2.plot(time, gpkwh, 'black', label='emission')
@@ -224,6 +223,7 @@ class Plot(AbstractModule):
 
         self.ax.legend(loc='upper left')
         self.ax2.legend(loc='upper right')
+        self.ax.xaxis.set_major_formatter(lambda x, pos: datetime.datetime.fromtimestamp(x).strftime("%H:%M"))
 
         self.figure_canvas.draw()
 
