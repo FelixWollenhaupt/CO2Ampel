@@ -175,13 +175,16 @@ class Home(AbstractModule):
 
     def process_data(self):
         if self.app.get_attr('running'):
-            all_info = get_all_information(use_precise=self.app.get_attr('use_precise'))
-            self.app.set_attr('current_data', all_info)
-            write_to_file(all_info['power'])
-            self.app.set_attr('new_data_plot', True)
-            self.app.set_attr('new_data_weather', True)
+            try:
+                all_info = get_all_information(use_precise=self.app.get_attr('use_precise'))
+                self.app.set_attr('current_data', all_info)
+                write_to_file(all_info['power'])
+                self.app.set_attr('new_data_plot', True)
+                self.app.set_attr('new_data_weather', True)
 
-            set_ampel(map_value_clamp(all_info['gpkwh'], 270, 650, 0, 1))
+                set_ampel(map_value_clamp(all_info['gpkwh'], 270, 650, 0, 1))
+            except Exception as e:
+                print(f"Exception {e}")
         
 
 
@@ -213,13 +216,14 @@ class Plot(AbstractModule):
         self.ax.set_ylabel('power in GW')
         self.ax.xaxis.set_major_formatter(lambda x, pos: datetime.datetime.fromtimestamp(x).strftime("%H:%M"))
 
-        ax2 = self.ax.twinx()
-        ax2.set_ylim(200, 900)
-        ax2.plot(time, gpkwh, 'black', label='emission')
-        ax2.set_ylabel('g CO2 per kWh')
+        self.ax2 = self.ax.twinx()
+        self.ax2.clear()
+        self.ax2.set_ylim(200, 900)
+        self.ax2.plot(time, gpkwh, 'black', label='emission')
+        self.ax2.set_ylabel('g CO2 per kWh')
 
         self.ax.legend(loc='upper left')
-        ax2.legend(loc='upper right')
+        self.ax2.legend(loc='upper right')
 
         self.figure_canvas.draw()
 
